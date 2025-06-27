@@ -14,6 +14,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setError("");
     setSuccess("");
+    console.log(email, password, name);
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
