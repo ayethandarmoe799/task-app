@@ -14,6 +14,8 @@ import {
   Legend,
   ArcElement,
 } from "chart.js";
+import Modal from "@/components/Modal";
+import Toast from "@/components/Toast";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement);
 
@@ -70,6 +72,9 @@ export default function DashboardPage() {
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [modalTask, setModalTask] = useState<Task | null>(null);
   const [activeTab, setActiveTab] = useState<'analytics' | 'add' | 'categories' | 'tasks'>('analytics');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [toast, setToast] = useState<{ message: string; type?: "success" | "error" | "info" } | null>(null);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") {
@@ -119,6 +124,7 @@ export default function DashboardPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
     const res = await fetch("/api/tasks", {
       method: "POST",
       headers: { 
@@ -133,9 +139,11 @@ export default function DashboardPage() {
         tagIds: selectedTags.map(t => t.id),
       }),
     });
+    setLoading(false);
     if (!res.ok) {
       const errorData = await res.json();
       setError(`Failed to create task: ${errorData.error || res.statusText}`);
+      setToast({ message: `Failed to create task: ${errorData.error || res.statusText}`, type: "error" });
     } else {
       setTitle("");
       setDescription("");
@@ -143,14 +151,16 @@ export default function DashboardPage() {
       setCategoryId("");
       setSelectedTags([]);
       fetchTasks();
+      setToast({ message: "Task created!", type: "success" });
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this task?")) {
-      await fetch(`/api/tasks/${id}`, { method: "DELETE", credentials: "include" });
-      fetchTasks();
-    }
+    setLoading(true);
+    await fetch(`/api/tasks/${id}`, { method: "DELETE", credentials: "include" });
+    setLoading(false);
+    fetchTasks();
+    setToast({ message: "Task deleted!", type: "success" });
   };
 
   const handleEdit = (task: Task) => {
@@ -165,6 +175,7 @@ export default function DashboardPage() {
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editTask) return;
+    setLoading(true);
     const res = await fetch(`/api/tasks/${editTask.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -177,8 +188,10 @@ export default function DashboardPage() {
         tagIds: selectedTags.map(t => t.id),
       }),
     });
+    setLoading(false);
     if (!res.ok) {
       setError("Failed to update task");
+      setToast({ message: "Failed to update task", type: "error" });
     } else {
       setEditTask(null);
       setTitle("");
@@ -187,6 +200,7 @@ export default function DashboardPage() {
       setCategoryId("");
       setSelectedTags([]);
       fetchTasks();
+      setToast({ message: "Task updated!", type: "success" });
     }
   };
 
@@ -227,9 +241,11 @@ export default function DashboardPage() {
       setNewCategoryColor("#3B82F6");
       setCategoryMsg("Category created!");
       fetchCategories();
+      setToast({ message: "Category created!", type: "success" });
     } else {
       const data = await res.json();
       setCategoryMsg(data.error || "Failed to create category");
+      setToast({ message: data.error || "Failed to create category", type: "error" });
     }
   };
 
@@ -326,7 +342,10 @@ export default function DashboardPage() {
           <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4 text-black">Progress Analytics</h2>
             {analyticsLoading ? (
-              <div className="text-center text-black">Loading analytics...</div>
+              <div className="text-center text-black flex flex-col items-center">
+                <svg className="animate-spin h-8 w-8 mx-auto mb-2 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+                Loading analytics...
+              </div>
             ) : analytics ? (
               <>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
@@ -402,7 +421,10 @@ export default function DashboardPage() {
                 </div>
               </>
             ) : (
-              <div className="text-center text-black">No analytics data.</div>
+              <div className="text-center text-black flex flex-col items-center">
+                <svg className="h-12 w-12 mb-2 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01" /></svg>
+                No analytics data.
+              </div>
             )}
           </div>
         )}
@@ -420,6 +442,7 @@ export default function DashboardPage() {
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
                   placeholder="Enter task title"
                   required
+                  aria-label="Task Title"
                 />
               </div>
               <div>
@@ -430,6 +453,7 @@ export default function DashboardPage() {
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
                   placeholder="Enter task description"
                   rows={3}
+                  aria-label="Task Description"
                 />
               </div>
               <div>
@@ -438,6 +462,7 @@ export default function DashboardPage() {
                   value={taskStatus}
                   onChange={(e) => setTaskStatus(e.target.value)}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
+                  aria-label="Task Status"
                 >
                   <option value="pending">Pending</option>
                   <option value="in-progress">In Progress</option>
@@ -450,6 +475,7 @@ export default function DashboardPage() {
                   value={categoryId}
                   onChange={e => setCategoryId(e.target.value)}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
+                  aria-label="Task Category"
                 >
                   <option value="">No Category</option>
                   {categories.map(cat => (
@@ -474,6 +500,7 @@ export default function DashboardPage() {
                   onKeyDown={handleTagInputKeyDown}
                   className="w-full p-2 border border-gray-300 rounded text-black"
                   placeholder="Type a tag and press Enter"
+                  aria-label="Tag Input"
                 />
                 <div className="flex flex-wrap gap-2 mt-2">
                   {tags.filter(t => !selectedTags.some(st => st.id === t.id)).map(tag => (
@@ -522,6 +549,7 @@ export default function DashboardPage() {
                   onChange={e => setNewCategoryName(e.target.value)}
                   className="w-full p-2 border border-gray-300 rounded text-black"
                   required
+                  aria-label="Category Name"
                 />
               </div>
               <div>
@@ -531,6 +559,7 @@ export default function DashboardPage() {
                   onChange={e => setNewCategoryColor(e.target.value)}
                   className="w-10 h-10 p-0 border-0 bg-transparent"
                   title="Pick a color"
+                  aria-label="Category Color Picker"
                 />
               </div>
               <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">Add</button>
@@ -540,7 +569,10 @@ export default function DashboardPage() {
             <div className="mt-6">
               <h3 className="text-lg font-semibold mb-2 text-black">Created Categories ({categories.length})</h3>
               {categories.length === 0 ? (
-                <p className="text-gray-500">No categories created yet.</p>
+                <div className="text-gray-500 flex flex-col items-center">
+                  <svg className="h-8 w-8 mb-2 text-gray-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h8" /></svg>
+                  No categories created yet.
+                </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                   {categories.map(cat => (
@@ -567,6 +599,7 @@ export default function DashboardPage() {
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
                     placeholder="Search by title or description..."
+                    aria-label="Search Tasks"
                   />
                 </div>
                 <div>
@@ -575,6 +608,7 @@ export default function DashboardPage() {
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value)}
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
+                    aria-label="Filter by Status"
                   >
                     <option value="all">All Statuses</option>
                     <option value="pending">Pending</option>
@@ -590,9 +624,13 @@ export default function DashboardPage() {
                 <h2 className="text-2xl font-semibold text-black">Your Tasks</h2>
               </div>
               {loading ? (
-                <div className="p-6 text-center text-black">Loading tasks...</div>
-              ) : filteredTasks.length === 0 ? (
                 <div className="p-6 text-center text-black">
+                  <svg className="animate-spin h-8 w-8 mx-auto mb-2 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+                  Loading tasks...
+                </div>
+              ) : filteredTasks.length === 0 ? (
+                <div className="p-6 text-center text-black flex flex-col items-center">
+                  <svg className="h-12 w-12 mb-2 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2a4 4 0 014-4h3m4 4v1a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2h5"></path></svg>
                   {tasks.length === 0 ? "No tasks yet. Create your first task above!" : "No tasks match your filters."}
                 </div>
               ) : (
@@ -626,12 +664,14 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex items-center gap-2 ml-0 sm:ml-4 mt-2 sm:mt-0">
                         <button
+                          aria-label="View Task"
                           onClick={() => setModalTask(task)}
                           className="bg-gray-200 text-black px-3 py-1 rounded text-sm hover:bg-gray-300 transition-colors"
                         >
                           View
                         </button>
                         <select
+                          aria-label="Change Task Status"
                           value={task.status}
                           onChange={(e) => handleStatusChange(task.id, e.target.value)}
                           className="text-sm border border-gray-300 rounded px-2 py-1 text-black"
@@ -641,13 +681,18 @@ export default function DashboardPage() {
                           <option value="completed">Completed</option>
                         </select>
                         <button
+                          aria-label="Edit Task"
                           onClick={() => handleEdit(task)}
                           className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors"
                         >
                           Edit
                         </button>
                         <button
-                          onClick={() => handleDelete(task.id)}
+                          aria-label="Delete Task"
+                          onClick={() => {
+                            setShowDeleteModal(true);
+                            setTaskToDelete(task);
+                          }}
                           className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors"
                         >
                           Delete
@@ -662,51 +707,80 @@ export default function DashboardPage() {
         )}
         {/* Modal remains outside tab content for global access */}
         {modalTask && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setModalTask(null)}>
-            <div
-              className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full relative"
-              onClick={e => e.stopPropagation()}
-            >
-              <button
-                className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-2xl"
-                onClick={() => setModalTask(null)}
-                aria-label="Close"
-              >
-                &times;
-              </button>
-              <h2 className="text-2xl font-bold mb-2 text-black">{modalTask.title}</h2>
-              <div className="mb-2">
-                <span className="font-semibold text-black">Status: </span>
-                <span className="capitalize text-black">{modalTask.status}</span>
-              </div>
-              {modalTask.category && (
-                <div className="mb-2">
-                  <span className="font-semibold text-black">Category: </span>
-                  <span className="px-2 py-1 text-xs font-medium rounded-full text-white" style={{ backgroundColor: modalTask.category.color }}>{modalTask.category.name}</span>
-                </div>
-              )}
-              {modalTask.tags && modalTask.tags.length > 0 && (
-                <div className="mb-2">
-                  <span className="font-semibold text-black">Tags: </span>
-                  {modalTask.tags.map(tag => (
-                    <span key={tag.id} className="px-2 py-1 text-xs font-medium rounded-full text-white mr-1" style={{ backgroundColor: tag.color }}>{tag.name}</span>
-                  ))}
-                </div>
-              )}
-              {modalTask.description && (
-                <div className="mb-2">
-                  <span className="font-semibold text-black">Description: </span>
-                  <span className="text-black">{modalTask.description}</span>
-                </div>
-              )}
-              <div className="mb-2 text-black">
-                <span className="font-semibold">Created: </span>{new Date(modalTask.createdAt).toLocaleString()}
-              </div>
-              <div className="mb-2 text-black">
-                <span className="font-semibold">Updated: </span>{new Date(modalTask.updatedAt).toLocaleString()}
-              </div>
+          <Modal
+            isOpen={!!modalTask}
+            onClose={() => setModalTask(null)}
+            title={modalTask.title}
+            overlayClassName="bg-transparent"
+          >
+            <div className="mb-2">
+              <span className="font-semibold text-black">Status: </span>
+              <span className="capitalize text-black">{modalTask.status}</span>
             </div>
-          </div>
+            {modalTask.category && (
+              <div className="mb-2">
+                <span className="font-semibold text-black">Category: </span>
+                <span className="px-2 py-1 text-xs font-medium rounded-full text-white" style={{ backgroundColor: modalTask.category.color }}>{modalTask.category.name}</span>
+              </div>
+            )}
+            {modalTask.tags && modalTask.tags.length > 0 && (
+              <div className="mb-2">
+                <span className="font-semibold text-black">Tags: </span>
+                {modalTask.tags.map(tag => (
+                  <span key={tag.id} className="px-2 py-1 text-xs font-medium rounded-full text-white mr-1" style={{ backgroundColor: tag.color }}>{tag.name}</span>
+                ))}
+              </div>
+            )}
+            {modalTask.description && (
+              <div className="mb-2">
+                <span className="font-semibold text-black">Description: </span>
+                <span className="text-black">{modalTask.description}</span>
+              </div>
+            )}
+            <div className="mb-2 text-black">
+              <span className="font-semibold">Created: </span>{new Date(modalTask.createdAt).toLocaleString()}
+            </div>
+            <div className="mb-2 text-black">
+              <span className="font-semibold">Updated: </span>{new Date(modalTask.updatedAt).toLocaleString()}
+            </div>
+          </Modal>
+        )}
+        {showDeleteModal && (
+          <Modal
+            isOpen={showDeleteModal}
+            onClose={() => setShowDeleteModal(false)}
+            title="Confirm Deletion"
+            actions={
+              <>
+                <button
+                  className="bg-gray-300 text-black px-4 py-2 rounded mr-2"
+                  onClick={() => setShowDeleteModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="bg-red-600 text-white px-4 py-2 rounded"
+                  onClick={async () => {
+                    if (taskToDelete) {
+                      await handleDelete(taskToDelete.id);
+                      setShowDeleteModal(false);
+                    }
+                  }}
+                >
+                  Delete
+                </button>
+              </>
+            }
+          >
+            <p className="text-black">Are you sure you want to delete this task?</p>
+          </Modal>
+        )}
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            onClose={() => setToast(null)}
+          />
         )}
       </div>
     </div>
